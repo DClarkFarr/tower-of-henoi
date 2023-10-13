@@ -370,6 +370,7 @@ onMounted(() => {
           </tr>
           <tr
             class="queue-disc"
+            :class="{ complete: index <= queueIndex }"
             v-for="(action, index) in queue"
             :key="`${index}-${action.disc}-${action.from}-${action.to}`"
           >
@@ -409,6 +410,7 @@ html {
 .left {
   width: 500px;
   background: #efefef;
+  padding: 10px;
 }
 
 .towers {
@@ -418,7 +420,9 @@ html {
 
 .tower {
   border: solid 1px #ccc;
+  padding: 4px 0;
 }
+
 .disc {
   height: 30px;
   width: 30px;
@@ -468,6 +472,13 @@ html {
       text-align: center;
       background: #eee;
     }
+  }
+}
+
+.queue-disc {
+  &.complete td {
+    background: green;
+    color: white;
   }
 }
 </style>
