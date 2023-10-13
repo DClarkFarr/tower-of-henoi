@@ -267,7 +267,7 @@ const onClickPlay = async () => {
       setTimeout(() => {
         onClickNext();
         resolve(null);
-      }, 750);
+      }, 500);
     });
   };
   while (queueIndex.value < queue.value.length - 1) {
