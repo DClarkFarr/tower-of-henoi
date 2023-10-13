@@ -74,55 +74,15 @@ function getDiscsToShift(towers: Towers, towerNum: TowerNum, disc: number) {
   return towers[towerNum].filter((d) => d < disc);
 }
 
-function applyNewShiftToQueue(
+function applySubShiftToQueue(
   towers: Towers,
   steps: number,
   queue: Queue,
   actionsTaken: Queue
-) {
-  const lastAction = queue[queue.length - 1];
-  const discsToShift = getDiscsToShift(
-    towers,
-    getTowerByDisc(towers, lastAction.disc),
-    lastAction.disc
-  );
-
-  if (!discsToShift.length) {
-    throw new Error("No discs to shift");
-  }
-
-  const shiftAlt = lastAction.to;
-  const shiftDestination = getMoveAlt(
-    getTowerByDisc(towers, lastAction.disc),
-    shiftAlt
-  );
-
-  return handleQueueIteration(
-    towers,
-    steps,
-    [
-      ...queue,
-      ...discsToShift.reverse().map<QueueAction>((disc, i) => ({
-        from: getTowerByDisc(towers, disc),
-        disc,
-        to: i % 2 === 0 ? shiftDestination : shiftAlt,
-      })),
-    ],
-    actionsTaken
-  );
-}
-
-function applyMicroShiftToQueue(
-  towers: Towers,
-  steps: number,
-  queue: Queue,
-  actionsTaken: Queue
-) {
+): [number, Queue] {
   const lastAction = queue[queue.length - 1];
 
-  const destination = lastAction.to;
-
-  const towersByMicroBase = TOWERS.map((towerNum) => {
+  const towersByBase = TOWERS.map((towerNum) => {
     const filtered = towers[towerNum].filter((n) => n < lastAction.disc);
     return {
       towerNum,
@@ -132,15 +92,38 @@ function applyMicroShiftToQueue(
     .filter((base) => base.biggestBase > -1)
     .sort((a, b) => a.biggestBase - b.biggestBase);
 
-  let microDestination = towersByMicroBase[1].towerNum;
-  let microAlt = destination;
-  let microDisc = towersByMicroBase[1].biggestBase;
-  let miniDiscsToShift = getDiscsToShift(towers, destination, microDisc);
+  let discsToShift: number[] = [];
+  let fromTower = getTowerByDisc(towers, lastAction.disc);
+  let toDestinationTower = lastAction.to;
+  let toAltTower = getMoveAlt(fromTower, toDestinationTower);
 
-  if (towersByMicroBase[0].towerNum !== microAlt) {
-    microDisc = towersByMicroBase[0].biggestBase;
-    microAlt = towersByMicroBase[0].towerNum;
-    miniDiscsToShift = getDiscsToShift(towers, microAlt, microDisc + 1);
+  if (
+    towersByBase.length === 1 &&
+    towersByBase[0].towerNum === lastAction.from
+  ) {
+    // target has discs on top of it
+    discsToShift = getDiscsToShift(towers, fromTower, lastAction.disc);
+
+    // swap base destination/alt because we want our sub stack to not block main destination
+    toDestinationTower = toAltTower;
+    toAltTower = getMoveAlt(toDestinationTower, fromTower);
+  } else if (towersByBase.length === 1) {
+    // there's an empty column
+    toDestinationTower = getMoveAlt(towersByBase[0].towerNum, fromTower);
+    fromTower = towersByBase[0].towerNum;
+    toAltTower = getMoveAlt(toDestinationTower, fromTower);
+    discsToShift = getDiscsToShift(towers, fromTower, lastAction.disc);
+  } else if (towersByBase.length === 2) {
+    // need to shift two smaller towers into 1
+    const [smallerBase, biggerBase] = towersByBase;
+    toDestinationTower = biggerBase.towerNum;
+    fromTower = smallerBase.towerNum;
+    toAltTower = getMoveAlt(fromTower, toDestinationTower);
+    discsToShift = getDiscsToShift(towers, fromTower, lastAction.disc - 1);
+  }
+
+  if (!discsToShift.length) {
+    throw new Error("No discs to shift");
   }
 
   return handleQueueIteration(
@@ -148,18 +131,16 @@ function applyMicroShiftToQueue(
     steps,
     [
       ...queue,
-      ...miniDiscsToShift.reverse().map<QueueAction>((disc, i) => ({
-        from: microAlt,
+      ...discsToShift.reverse().map<QueueAction>((disc, i) => ({
+        from: fromTower,
         disc,
-        to:
-          i % 2 === 0
-            ? microDestination
-            : getMoveAlt(microAlt, microDestination),
+        to: i % 2 === 0 ? toDestinationTower : toAltTower,
       })),
     ],
     actionsTaken
   );
 }
+
 function handleQueueIteration(
   towers: Towers,
   steps: number,
@@ -179,18 +160,7 @@ function handleQueueIteration(
       return [steps + 1, actionsTaken];
     }
   } else {
-    if (
-      isTopDisc(
-        towersCopy,
-        getTowerByDisc(towersCopy, lastAction.disc),
-        lastAction.disc
-      )
-    ) {
-      // target tower is obstructed. Must do a micro shift.
-      return applyMicroShiftToQueue(towersCopy, steps, queue, actionsTaken);
-    } else {
-      return applyNewShiftToQueue(towersCopy, steps, queue, actionsTaken);
-    }
+    return applySubShiftToQueue(towersCopy, steps, queue, actionsTaken);
   }
 }
 
@@ -221,7 +191,6 @@ function queueMoves(towers: Towers) {
  * Vue Methods
  */
 const numDiscs = ref(4);
-const totalMoves = ref(0);
 const minMoves = ref(0);
 const queue = ref<Queue>([]);
 const queueIndex = ref(-1);
@@ -378,7 +347,7 @@ onMounted(() => {
       <div class="state">
         <div>
           <b>Total Moves: </b>
-          <span>{{ totalMoves }}</span>
+          <span>{{ queueIndex + 1 }}</span>
         </div>
         <div>
           <b>Min Moves: </b>
