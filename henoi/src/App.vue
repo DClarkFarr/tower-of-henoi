@@ -4,13 +4,9 @@ type Tower = number[];
 type TowerNum = 1 | 2 | 3;
 type Towers = Record<TowerNum, Tower> & { discs: Record<number, TowerNum> };
 
-type DiscCoords = {
-  tower: TowerNum;
-  disc: number;
-};
-
 type QueueAction = {
-  coords: DiscCoords;
+  from: TowerNum;
+  disc: number;
   to: TowerNum;
 };
 
@@ -29,29 +25,25 @@ function createStartingDisks(numDiscs: number) {
     .map((v, k) => k);
 }
 
-function moveDisc(
-  towers: Towers,
-  discCoords: DiscCoords,
-  toTowerNum: TowerNum
-) {
-  const discTower = getTowerByDisc(towers, discCoords.disc);
+function moveDisc(towers: Towers, disc: number, toTowerNum: TowerNum) {
+  const discTower = getTowerByDisc(towers, disc);
 
-  if (towers[discTower][0] !== discCoords.disc) {
+  if (towers[discTower][0] !== disc) {
     throw new Error("Cannot move a disc unless it is on top");
   }
 
-  console.log(
-    "moving",
-    discCoords.disc,
-    "(" + towers[discTower][0] + ")",
-    "from tower",
-    discTower,
-    "to",
-    toTowerNum
-  );
+  // console.log(
+  //   "moving",
+  //   disc,
+  //   "(" + towers[discTower][0] + ")",
+  //   "from tower",
+  //   discTower,
+  //   "to",
+  //   toTowerNum
+  // );
   towers[discTower].shift()!;
-  towers[toTowerNum].unshift(discCoords.disc);
-  towers.discs[discCoords.disc] = toTowerNum;
+  towers[toTowerNum].unshift(disc);
+  towers.discs[disc] = toTowerNum;
 }
 
 function isTopDisc(towers: Towers, towerNum: TowerNum, discNum: number) {
@@ -61,31 +53,21 @@ function isTopDisc(towers: Towers, towerNum: TowerNum, discNum: number) {
 function executeQueueAction(
   towers: Towers,
   action: QueueAction,
-  queue: Queue,
   actionsTaken: Queue
 ) {
-  moveDisc(towers, action.coords, action.to);
-
+  moveDisc(towers, action.disc, action.to);
   actionsTaken.push(action);
 }
 
-function canMoveDisc(
-  towers: Towers,
-  discCoords: DiscCoords,
-  targetTower: TowerNum
-) {
-  if (
-    !isTopDisc(towers, getTowerByDisc(towers, discCoords.disc), discCoords.disc)
-  ) {
+function canMoveDisc(towers: Towers, disc: number, targetTower: TowerNum) {
+  if (!isTopDisc(towers, getTowerByDisc(towers, disc), disc)) {
     return false;
   }
-  return (
-    !towers[targetTower].length || discCoords.disc < towers[targetTower][0]
-  );
+  return !towers[targetTower].length || disc < towers[targetTower][0];
 }
 
-function getTowerByDisc(towers: Towers, discNum: number) {
-  return towers.discs[discNum];
+function getTowerByDisc(towers: Towers, disc: number) {
+  return towers.discs[disc];
 }
 
 function getDiscsToShift(towers: Towers, towerNum: TowerNum, disc: number) {
@@ -99,19 +81,19 @@ function applyNewShiftToQueue(
   actionsTaken: Queue
 ) {
   const lastAction = queue[queue.length - 1];
-  const discToShift = getDiscsToShift(
+  const discsToShift = getDiscsToShift(
     towers,
-    getTowerByDisc(towers, lastAction.coords.disc),
-    lastAction.coords.disc
+    getTowerByDisc(towers, lastAction.disc),
+    lastAction.disc
   );
 
-  if (!discToShift.length) {
+  if (!discsToShift.length) {
     throw new Error("No discs to shift");
   }
 
   const shiftAlt = lastAction.to;
   const shiftDestination = getMoveAlt(
-    getTowerByDisc(towers, lastAction.coords.disc),
+    getTowerByDisc(towers, lastAction.disc),
     shiftAlt
   );
 
@@ -120,12 +102,9 @@ function applyNewShiftToQueue(
     steps,
     [
       ...queue,
-      ...discToShift.reverse().map<QueueAction>((disc, i) => ({
-        action: "shift",
-        coords: {
-          tower: getTowerByDisc(towers, disc),
-          disc: disc,
-        },
+      ...discsToShift.reverse().map<QueueAction>((disc, i) => ({
+        from: getTowerByDisc(towers, disc),
+        disc,
         to: i % 2 === 0 ? shiftDestination : shiftAlt,
       })),
     ],
@@ -144,7 +123,7 @@ function applyMicroShiftToQueue(
   const destination = lastAction.to;
 
   const towersByMicroBase = TOWERS.map((towerNum) => {
-    const filtered = towers[towerNum].filter((n) => n < lastAction.coords.disc);
+    const filtered = towers[towerNum].filter((n) => n < lastAction.disc);
     return {
       towerNum,
       biggestBase: filtered.length ? Math.max(...filtered) : -1,
@@ -170,11 +149,8 @@ function applyMicroShiftToQueue(
     [
       ...queue,
       ...miniDiscsToShift.reverse().map<QueueAction>((disc, i) => ({
-        action: "shift",
-        coords: {
-          tower: microAlt,
-          disc: disc,
-        },
+        from: microAlt,
+        disc,
         to:
           i % 2 === 0
             ? microDestination
@@ -193,9 +169,9 @@ function handleQueueIteration(
   const lastAction = queue[queue.length - 1];
   const towersCopy = JSON.parse(JSON.stringify(towers)) as Towers;
 
-  if (canMoveDisc(towersCopy, lastAction.coords, lastAction.to)) {
+  if (canMoveDisc(towersCopy, lastAction.disc, lastAction.to)) {
     queue.pop();
-    executeQueueAction(towersCopy, lastAction, queue, actionsTaken);
+    executeQueueAction(towersCopy, lastAction, actionsTaken);
 
     if (queue.length) {
       return handleQueueIteration(towersCopy, steps + 1, queue, actionsTaken);
@@ -206,8 +182,8 @@ function handleQueueIteration(
     if (
       isTopDisc(
         towersCopy,
-        getTowerByDisc(towersCopy, lastAction.coords.disc),
-        lastAction.coords.disc
+        getTowerByDisc(towersCopy, lastAction.disc),
+        lastAction.disc
       )
     ) {
       // target tower is obstructed. Must do a micro shift.
@@ -231,10 +207,8 @@ function queueMoves(towers: Towers) {
     [
       ...towers[1].map((disc) => {
         return {
-          coords: {
-            tower: 1,
-            disc,
-          },
+          from: 1,
+          disc,
           to: DESTINATION,
         } as QueueAction;
       }),
@@ -310,7 +284,7 @@ const onClickNext = () => {
 
   const action = queue.value[queueIndex.value];
 
-  executeQueueAction(towers.value, action, queue.value, []);
+  executeQueueAction(towers.value, action, []);
 };
 
 const onChangeNumDiscs = (e: Event) => {
@@ -428,11 +402,11 @@ onMounted(() => {
           <tr
             class="queue-disc"
             v-for="(action, index) in queue"
-            :key="`${index}-${action.coords.disc}-${action.coords.tower}-${action.to}`"
+            :key="`${index}-${action.disc}-${action.from}-${action.to}`"
           >
             <td>{{ index + 1 }}</td>
-            <td>{{ action.coords.disc + 1 }}</td>
-            <td>{{ action.coords.tower }}</td>
+            <td>{{ action.disc + 1 }}</td>
+            <td>{{ action.from }}</td>
             <td>{{ action.to }}</td>
             <td>{{ index > queueIndex ? "No" : "Yes" }}</td>
           </tr>
